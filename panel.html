@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<title>Rodízio Avec – Painel</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg: #0d0b18;
+  --surface: #13111f;
+  --card: #1a1729;
+  --border: #2a2540;
+  --purple: #7c3aed;
+  --purple-light: #a78bfa;
+  --purple-pale: #c4b5fd;
+  --text: #e0e0f0;
+  --muted: #7070a0;
+  --success: #10b981;
+  --danger: #ef4444;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top:0; z-index:10;
+}
+.logo { display:flex; align-items:center; gap:12px; }
+.logo .icon { font-size:24px; }
+.logo h1 { font-size:17px; font-weight:700; color:var(--purple-pale); }
+.logo .sub { font-size:11px; color:var(--muted); }
+
+/* ── TABS ── */
+.tabs {
+  display:flex; gap:4px;
+}
+.tab-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn.active, .tab-btn:hover {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: #fff;
+}
+
+/* ── LAYOUT ── */
+main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+/* ── RANKING ── */
+.ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+.service-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.service-card-header {
+  background: linear-gradient(135deg, #2a1f4e, var(--card));
+  padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.service-card-header h3 {
+  font-size: 15px; font-weight:700; color:var(--purple-pale);
+}
+.service-total {
+  font-size: 11px; color:var(--muted);
+  background: var(--border);
+  border-radius: 20px;
+  padding: 2px 10px;
+}
+.prof-list { padding: 12px; }
+.prof-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+  position: relative;
+}
+.prof-row:hover { background: #1e1b2e; }
+.prof-row.next-up {
+  background: linear-gradient(90deg, rgba(124,58,237,0.15), transparent);
+  border: 1px solid rgba(124,58,237,0.3);
+}
+.rank-badge {
+  width: 28px; height:28px;
+  border-radius: 50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700;
+  flex-shrink:0;
+}
+.rank-1 { background: #f59e0b; color:#000; }
+.rank-2 { background: #9ca3af; color:#000; }
+.rank-3 { background: #b45309; color:#fff; }
+.rank-other { background: var(--border); color:var(--muted); }
+
+.prof-name { flex:1; font-size:13px; font-weight:600; }
+.prof-count { font-size:12px; color:var(--muted); }
+
+.next-badge {
+  background: var(--purple);
+  color:#fff;
+  border-radius:20px;
+  padding:2px 8px;
+  font-size:10px;
+  font-weight:700;
+  position: absolute;
+  right: 10px;
+}
+
+.bar-wrap { flex:1; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:3px; background: linear-gradient(90deg, var(--purple), var(--purple-light)); transition: width 0.4s; }
+
+.inactive-tag {
+  font-size:10px; color:var(--muted);
+  background: var(--border); border-radius:20px; padding:1px 8px;
+}
+
+/* ── SETTINGS ── */
+.settings-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.settings-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+.settings-card h3 {
+  font-size:14px; font-weight:700; color:var(--purple-pale);
+  margin-bottom:14px;
+  padding-bottom:10px;
+  border-bottom: 1px solid var(--border);
+  display:flex; align-items:center; gap:8px;
+}
+.add-row {
+  display:flex; gap:8px; margin-bottom:14px;
+}
+.add-row input {
+  flex:1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius:8px;
+  color:var(--text);
+  padding:8px 12px;
+  font-size:13px;
+  outline:none;
+}
+.add-row input:focus { border-color:var(--purple); }
+.btn-add {
+  background:var(--purple); color:#fff;
+  border:none; border-radius:8px;
+  padding:8px 14px; font-size:13px;
+  font-weight:600; cursor:pointer;
+  white-space:nowrap;
+}
+.btn-add:hover { background:#6d28d9; }
+
+.item-list { display:flex; flex-direction:column; gap:6px; }
+.item-row {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius:8px;
+}
+.item-row span { flex:1; font-size:13px; }
+.toggle-btn {
+  background:none; border:none; cursor:pointer;
+  font-size:14px; color:var(--muted);
+  padding:2px 6px; border-radius:4px;
+  transition: color 0.2s;
+}
+.toggle-btn:hover { color:var(--purple-light); }
+.del-btn {
+  background:none; border:none; cursor:pointer;
+  color:var(--muted); font-size:14px;
+  padding:2px 6px; border-radius:4px;
+  transition: color 0.2s;
+}
+.del-btn:hover { color:var(--danger); }
+
+.edit-btn {
+  background:none; border:none; cursor:pointer;
+  color:var(--muted); font-size:13px;
+  padding:2px 6px; border-radius:4px;
+  transition: color 0.2s;
+}
+.edit-btn:hover { color:var(--purple-light); }
+.item-label { flex:1; font-size:13px; }
+
+.active-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--success); flex-shrink:0;
+}
+.inactive-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--muted); flex-shrink:0;
+}
+
+/* ── HISTÓRICO ── */
+.history-table {
+  width:100%;
+  border-collapse:collapse;
+}
+.history-table th {
+  text-align:left; padding:10px 14px;
+  font-size:11px; font-weight:600;
+  text-transform:uppercase; letter-spacing:1px;
+  color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+.history-table td {
+  padding:10px 14px; font-size:13px;
+  border-bottom:1px solid #1e1b2e;
+}
+.history-table tr:hover td { background:#1a1729; }
+.source-badge {
+  background:var(--border); border-radius:20px;
+  padding:2px 8px; font-size:10px; color:var(--muted);
+}
+.source-badge.auto { background: rgba(16,185,129,0.15); color:#10b981; }
+.source-badge.manual { background: rgba(124,58,237,0.15); color:var(--purple-light); }
+
+/* ── STATS ── */
+.kpi-row {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:16px; margin-bottom:28px;
+}
+.kpi {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+}
+.kpi .val { font-size:28px; font-weight:700; color:var(--purple-light); }
+.kpi .lbl { font-size:11px; color:var(--muted); margin-top:4px; }
+
+.empty-state {
+  text-align:center; padding:60px 20px;
+  color:var(--muted);
+}
+.empty-state .icon { font-size:40px; margin-bottom:12px; }
+.empty-state p { font-size:13px; line-height:1.8; }
+
+/* ── GOOGLE SHEETS IMPORT ── */
+.upload-card { margin-bottom: 24px; }
+.upload-desc {
+  font-size:13px; color:var(--muted); line-height:1.7;
+  margin-bottom:12px;
+}
+.upload-desc strong { color:var(--text); }
+.upload-desc code {
+  background:var(--border); border-radius:4px;
+  padding:1px 6px; font-size:12px; color:var(--purple-pale);
+}
+.gs-template-link {
+  display:inline-flex; align-items:center; gap:6px;
+  background: rgba(66,133,244,0.12);
+  border: 1px solid rgba(66,133,244,0.35);
+  color: #7ab3f7;
+  border-radius:8px; padding:8px 14px;
+  font-size:13px; font-weight:600;
+  text-decoration:none; margin-bottom:14px;
+  transition:all 0.2s;
+}
+.gs-template-link:hover {
+  background: rgba(66,133,244,0.22);
+  border-color: rgba(66,133,244,0.6);
+  color:#aacfff;
+}
+.gs-input-row {
+  display:flex; gap:8px; align-items:center; margin-bottom:8px;
+}
+.gs-input-row input {
+  flex:1; background:var(--bg);
+  border:1px solid var(--border); border-radius:8px;
+  color:var(--text); padding:9px 14px; font-size:13px;
+  outline:none; min-width:0;
+}
+.gs-input-row input:focus { border-color:var(--purple); }
+.gs-input-row input::placeholder { color:var(--muted); }
+.btn-upload {
+  background:var(--purple); color:#fff;
+  border:none; border-radius:8px; padding:9px 18px;
+  font-size:13px; font-weight:600;
+  cursor:pointer; transition:background 0.2s; white-space:nowrap;
+}
+.btn-upload:hover { background:#6d28d9; }
+.gs-loading {
+  display:flex; align-items:center; gap:10px;
+  font-size:13px; color:var(--muted); padding:8px 0;
+}
+.gs-spinner {
+  width:16px; height:16px; border-radius:50%;
+  border:2px solid var(--border);
+  border-top-color:var(--purple);
+  animation:gs-spin 0.7s linear infinite; flex-shrink:0;
+}
+@keyframes gs-spin { to { transform:rotate(360deg); } }
+.preview-section {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:16px; margin-top:16px;
+}
+.preview-col {}
+.preview-title {
+  font-size:12px; font-weight:600; color:var(--purple-pale);
+  margin-bottom:8px;
+}
+.preview-list {
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; padding:10px; max-height:160px;
+  overflow-y:auto;
+}
+.preview-item {
+  font-size:13px; color:var(--text);
+  padding:4px 6px; border-radius:4px;
+  display:flex; align-items:center; gap:6px;
+}
+.preview-item.new { color:var(--success); }
+.preview-item.existing { color:var(--muted); }
+.preview-item .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.preview-item.new .dot { background:var(--success); }
+.preview-item.existing .dot { background:var(--muted); }
+.upload-confirm-row {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:14px; flex-wrap:wrap; gap:10px;
+}
+.upload-msg { font-size:13px; color:var(--muted); }
+.upload-error {
+  background:rgba(239,68,68,0.1); border:1px solid var(--danger);
+  border-radius:8px; padding:10px 14px;
+  font-size:13px; color:#fca5a5;
+  margin-top:12px;
+}
+
+/* ── SERVIÇOS POR PROFISSIONAL ── */
+.ps-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  min-height: 500px;
+}
+.ps-sidebar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  align-self: start;
+}
+.ps-sidebar-title {
+  padding: 14px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ps-prof-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+  position: relative;
+}
+.ps-prof-item:last-child { border-bottom: none; }
+.ps-prof-item:hover { background: #1e1b2e; }
+.ps-prof-item.active {
+  background: linear-gradient(90deg, rgba(124,58,237,0.2), transparent);
+  color: var(--purple-pale);
+  font-weight: 600;
+}
+.ps-prof-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--purple);
+  border-radius: 0 3px 3px 0;
+}
+.ps-prof-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ps-prof-badge {
+  margin-left: auto;
+  background: var(--border);
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.ps-prof-item.active .ps-prof-badge {
+  background: rgba(124,58,237,0.3);
+  color: var(--purple-pale);
+}
+
+/* Editor */
+.ps-main { min-width: 0; }
+.ps-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ps-prof-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--purple-pale);
+}
+.ps-prof-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.ps-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ps-btn-all, .ps-btn-none {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ps-btn-all:hover { border-color: var(--success); color: var(--success); }
+.ps-btn-none:hover { border-color: var(--danger); color: #fca5a5; }
+.ps-btn-save {
+  background: var(--purple);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ps-btn-save:hover { background: #6d28d9; }
+.ps-btn-save.saved {
+  background: var(--success);
+}
+
+/* Tabela de serviços */
+.ps-group { margin-bottom: 16px; }
+.ps-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple-pale);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+}
+.ps-group-header input[type=checkbox] {
+  width: 15px; height: 15px;
+  accent-color: var(--purple);
+  cursor: pointer;
+}
+.ps-group-body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+.ps-service-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.ps-service-row:last-child { border-bottom: none; }
+.ps-service-row:hover { background: #1a1729; }
+.ps-service-row.checked { background: rgba(124,58,237,0.06); }
+.ps-service-row input[type=checkbox] {
+  width: 16px; height: 16px;
+  accent-color: var(--purple);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ps-service-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+}
+.ps-service-row.checked .ps-service-name { color: #fff; }
+
+
+/* ── HISTÓRICO FILTROS ── */
+.history-filters {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.filter-select, .filter-date {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text);
+  padding: 7px 10px; font-size: 13px; outline: none;
+  transition: border 0.2s;
+}
+.filter-select:focus, .filter-date:focus { border-color: var(--purple); }
+.filter-date { color-scheme: dark; }
+.filter-clear-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); border-radius: 7px;
+  padding: 7px 12px; font-size: 12px; cursor: pointer;
+  transition: all 0.2s;
+}
+.filter-clear-btn:hover { border-color: var(--danger); color: #fca5a5; }
+.history-count {
+  font-size: 12px; color: var(--muted); margin-left: auto;
+}
+.export-btn {
+  background: var(--purple); color: #fff; border: none;
+  border-radius: 7px; padding: 7px 14px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: background 0.2s;
+  white-space: nowrap;
+}
+.export-btn:hover { background: #6d28d9; }
+
+/* ── RANKING TABELA ── */
+.ranking-search-wrap { margin-bottom: 0; }
+.ranking-search {
+  width: 300px; background: var(--card);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 9px 14px; font-size: 13px;
+  outline: none; transition: border 0.2s;
+}
+.ranking-search:focus { border-color: var(--purple); }
+.ranking-search::placeholder { color: var(--muted); }
+.ranking-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--card); border-radius: 12px;
+  overflow: hidden; border: 1px solid var(--border);
+}
+.ranking-table thead tr {
+  background: linear-gradient(135deg, #2a1f4e, var(--surface));
+}
+.ranking-table th {
+  padding: 12px 16px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--purple-pale); text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.ranking-th-service { text-align: left !important; min-width: 180px; }
+.ranking-table td {
+  padding: 11px 16px; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  text-align: center; color: var(--text);
+}
+.ranking-table tr:last-child td { border-bottom: none; }
+.ranking-table tbody tr:hover td { background: #1e1b2e; }
+.service-name-cell {
+  text-align: left !important; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.service-total-badge {
+  background: var(--border); border-radius: 20px;
+  padding: 1px 8px; font-size: 11px;
+  color: var(--muted); font-weight: 400;
+}
+.queue-cell { color: var(--text); }
+.queue-cell:nth-child(2) { color: var(--purple-pale); font-weight: 700; }
+.queue-cell:nth-child(3) { color: #a0a0c0; }
+.queue-empty { color: var(--border) !important; }
+
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="icon">✂️</div>
+    <div>
+      <h1>Rodízio Avec</h1>
+      <div class="sub">Painel de gerenciamento</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ranking">🏆 Ranking</button>
+    <button class="tab-btn" data-tab="history">📋 Histórico</button>
+    <button class="tab-btn" data-tab="prof-services">🔗 Serviços por Profissional</button>
+    <button class="tab-btn" data-tab="settings">⚙️ Configurações</button>
+  </div>
+</header>
+
+<main>
+  <!-- KPIs -->
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi"><div class="val" id="kpiTotal">–</div><div class="lbl">Atendimentos total</div></div>
+    <div class="kpi"><div class="val" id="kpiToday">–</div><div class="lbl">Hoje</div></div>
+    <div class="kpi"><div class="val" id="kpiProfs">–</div><div class="lbl">Profissionais ativos</div></div>
+    <div class="kpi"><div class="val" id="kpiServices">–</div><div class="lbl">Tipos de serviço</div></div>
+  </div>
+
+  <!-- RANKING -->
+  <div class="tab-content active" id="tab-ranking">
+    <div class="ranking-grid" id="rankingGrid"></div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="tab-content" id="tab-history">
+    <div id="historyContainer">
+      <!-- Filtros -->
+      <div class="history-filters">
+        <select id="filterProf" class="filter-select">
+          <option value="">Todos os profissionais</option>
+        </select>
+        <select id="filterServ" class="filter-select">
+          <option value="">Todos os serviços</option>
+        </select>
+        <input type="date" id="filterDateFrom" class="filter-date" title="Data início" />
+        <input type="date" id="filterDateTo"   class="filter-date" title="Data fim" />
+        <button class="filter-clear-btn" id="filterClearBtn">✕ Limpar</button>
+        <span id="historyCount" class="history-count"></span>
+        <button class="export-btn" id="exportHistoryBtn">⬇️ Exportar CSV</button>
+      </div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Cliente</th>
+            <th>Serviço</th>
+            <th>Profissional</th>
+            <th>Origem</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- SERVIÇOS POR PROFISSIONAL -->
+  <div class="tab-content" id="tab-prof-services">
+    <div class="ps-layout">
+      <!-- Lista de profissionais (sidebar) -->
+      <div class="ps-sidebar">
+        <div class="ps-sidebar-title">Profissionais</div>
+        <div id="psSidebarList"></div>
+      </div>
+      <!-- Tabela de serviços -->
+      <div class="ps-main">
+        <div id="psEmptyState" class="empty-state">
+          <div class="icon">👈</div>
+          <p>Selecione um profissional para configurar os serviços que ele pode atender.</p>
+        </div>
+        <div id="psEditor" style="display:none">
+          <div class="ps-header">
+            <div>
+              <div class="ps-prof-name" id="psProfName"></div>
+              <div class="ps-prof-sub">Marque os serviços que este profissional realiza</div>
+            </div>
+            <div class="ps-header-actions">
+              <button class="ps-btn-all" id="psSelectAll">Marcar todos</button>
+              <button class="ps-btn-none" id="psSelectNone">Desmarcar todos</button>
+              <button class="ps-btn-save" id="psSaveBtn">💾 Salvar</button>
+            </div>
+          </div>
+          <div id="psServiceTable"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIGURAÇÕES -->
+  <div class="tab-content" id="tab-settings">
+
+    <!-- Upload em massa -->
+    <div class="settings-card upload-card">
+      <h3>📊 Importar via Google Sheets</h3>
+      <p class="upload-desc">
+        Cole o link de uma planilha do Google Sheets com duas abas:
+        <strong>Profissionais</strong> e <strong>Servicos</strong> — cada uma com uma coluna <code>nome</code>.<br>
+        A planilha deve estar com acesso <strong>"Qualquer pessoa com o link pode ver"</strong>.
+      </p>
+      <a class="gs-template-link" id="gsTemplateLink" href="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/edit" target="_blank">
+        📋 Abrir planilha modelo no Google Sheets
+      </a>
+      <div class="gs-input-row">
+        <input type="text" id="gsLinkInput" placeholder="Cole aqui o link da sua planilha do Google Sheets..." />
+        <button class="btn-upload" id="gsImportBtn">🔍 Carregar</button>
+      </div>
+      <div id="gsLoading" class="gs-loading" style="display:none">
+        <div class="gs-spinner"></div> Buscando dados da planilha...
+      </div>
+      <div id="uploadPreview" style="display:none">
+        <div class="preview-section">
+          <div class="preview-col">
+            <div class="preview-title">👤 Profissionais encontrados</div>
+            <div id="previewProfs" class="preview-list"></div>
+          </div>
+          <div class="preview-col">
+            <div class="preview-title">✂️ Serviços encontrados</div>
+            <div id="previewServices" class="preview-list"></div>
+          </div>
+        </div>
+        <div class="upload-confirm-row">
+          <span id="uploadMsg" class="upload-msg"></span>
+          <button class="btn-add" id="confirmImportBtn">✅ Confirmar importação</button>
+        </div>
+      </div>
+      <div id="uploadError" class="upload-error" style="display:none"></div>
+    </div>
+
+    <div class="settings-grid">
+      <!-- Profissionais -->
+      <div class="settings-card">
+        <h3>👤 Profissionais</h3>
+        <div class="add-row">
+          <input type="text" id="newProfName" placeholder="Nome do profissional" />
+          <button class="btn-add" id="addProfBtn">+ Adicionar</button>
+        </div>
+        <div class="item-list" id="profList"></div>
+      </div>
+      <!-- Tipos de serviço -->
+      <div class="settings-card">
+        <h3>✂️ Tipos de Serviço</h3>
+        <div class="add-row">
+          <input type="text" id="newServiceName" placeholder="Ex: Corte, Escova, Coloração" />
+          <button class="btn-add" id="addServiceBtn">+ Adicionar</button>
+        </div>
+        <div class="item-list" id="serviceList"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="panel.js"></script>
+</body>
+</html>

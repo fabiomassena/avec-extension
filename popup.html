@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width: 280px;
+  background: #13111f;
+  color: #e0e0f0;
+  font-family: 'Segoe UI', sans-serif;
+  padding: 18px;
+}
+.header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #2a2540;
+}
+.header .icon { font-size: 26px; }
+.header h1 { font-size: 14px; font-weight:700; color:#c4b5fd; }
+.header .sub { font-size: 11px; color:#7070a0; margin-top:2px; }
+
+.stats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; margin-bottom: 14px;
+}
+.stat {
+  background: #1e1b2e;
+  border: 1px solid #2a2540;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+.stat .val { font-size: 20px; font-weight:700; color:#a78bfa; }
+.stat .lbl { font-size: 10px; color:#7070a0; margin-top:2px; }
+
+.next-section {
+  background: linear-gradient(135deg, #2a1f4e, #1e1b2e);
+  border: 1px solid #7c3aed;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.next-section .title {
+  font-size: 10px; color:#a78bfa; font-weight:600;
+  text-transform: uppercase; letter-spacing:1px; margin-bottom:6px;
+}
+.service-select {
+  background: #13111f;
+  border: 1px solid #3b2d6b;
+  border-radius: 6px;
+  color: #e0e0f0;
+  padding: 6px 8px;
+  font-size: 12px;
+  width: 100%;
+  outline: none;
+  margin-bottom: 8px;
+}
+.next-name {
+  font-size: 16px; font-weight:700; color:#fff;
+  display: flex; align-items: center; gap: 6px;
+}
+.next-count { font-size: 11px; color:#7070a0; margin-top:3px; }
+
+.btn {
+  width: 100%; background: #7c3aed;
+  color:#fff; border:none; border-radius:8px;
+  padding: 10px; font-size: 13px; font-weight:600;
+  cursor:pointer; margin-bottom: 8px;
+  transition: background 0.2s;
+}
+.btn:hover { background: #6d28d9; }
+.btn.ghost {
+  background: transparent;
+  border: 1px solid #2a2540;
+  color: #a0a0c0;
+  padding: 8px;
+  font-size: 12px;
+}
+.btn.ghost:hover { border-color:#7c3aed; color:#c4b5fd; }
+.btn.undo { background:#2a2540; color:#a0a0c0; }
+.btn.undo:hover { background:#3b2d6b; color:#c4b5fd; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="icon">✂️</div>
+  <div>
+    <h1>Rodízio Avec</h1>
+    <div class="sub">Gerenciador de profissionais</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="val" id="totalProfs">–</div>
+    <div class="lbl">Profissionais</div>
+  </div>
+  <div class="stat">
+    <div class="val" id="totalToday">–</div>
+    <div class="lbl">Hoje</div>
+  </div>
+</div>
+
+<div class="next-section">
+  <div class="title">🔄 Próximo no rodízio</div>
+  <select class="service-select" id="serviceFilter">
+    <option value="">Selecione o serviço...</option>
+  </select>
+  <div class="next-name" id="nextName">–</div>
+  <div class="next-count" id="nextCount"></div>
+</div>
+
+<button class="btn" id="openPanel">📋 Abrir Painel Completo</button>
+<button class="btn undo" id="undoBtn">↩️ Desfazer último</button>
+<button class="btn ghost" id="openSettings">⚙️ Configurações</button>
+
+<script src="popup.js"></script>
+</body>
+</html>
