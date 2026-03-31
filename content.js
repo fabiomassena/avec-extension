@@ -24,7 +24,7 @@
   function safeSendMessage(msg, callback) {
     try {
       if (!chrome?.runtime?.id) return; // contexto invalidado
-      safeSendMessage(msg, (response) => {
+      chrome.runtime.sendMessage(msg, (response) => {
         if (chrome.runtime.lastError) {
           // Ignora erros de canal fechado (extensão recarregada)
           return;
@@ -117,14 +117,21 @@
 
     const cleanN = n => n.replace(/\s*-\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
 
-    // Descobre o grupo pelo nome do serviço
+    // Descobre o grupo pelo nome do serviço ou pela categoria manual
     const thisService = serviceTypes.find(s => s.id === rodizioServiceId);
     if (!thisService) return null;
-    const groupName = domNameToGroup.get(cleanN(thisService.name));
+    const domGroupName = domNameToGroup.get(cleanN(thisService.name));
+    const cats = state.serviceCategories || [];
+    const catGroupName = cats.find(c => c.id === thisService.categoryId)?.name;
+    const groupName = domGroupName || catGroupName;
 
-    // Todos os rodízio IDs do mesmo grupo (ou só o próprio se sem grupo)
+    // Todos os rodízio IDs do mesmo grupo/categoria (ou só o próprio se sem)
     const targetServiceIds = groupName
-      ? serviceTypes.filter(s => domNameToGroup.get(cleanN(s.name)) === groupName).map(s => s.id)
+      ? serviceTypes.filter(s => {
+          const sDom = domNameToGroup.get(cleanN(s.name));
+          const sCat = cats.find(c => c.id === s.categoryId)?.name;
+          return (sDom || sCat) === groupName;
+        }).map(s => s.id)
       : [rodizioServiceId];
 
     const eligibleProfs = allProfs.filter(prof => {
@@ -235,7 +242,9 @@
     const cleanN = n => n.replace(/\s*-\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
 
     const thisService = serviceTypes.find(s => s.id === serviceId);
-    const currentGroup = thisService ? domNameToGroup.get(cleanN(thisService.name)) : null;
+    const tipCats = cachedState.serviceCategories || [];
+    const tipCatName = thisService ? tipCats.find(c => c.id === thisService.categoryId)?.name : null;
+    const currentGroup = thisService ? (domNameToGroup.get(cleanN(thisService.name)) || tipCatName) : null;
 
     let totalAtendimentos = 0;
     if (currentGroup) {
@@ -630,7 +639,9 @@
         tipEl.style.display = "block";
         const cleanN = n => n.replace(/\s*-\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
         const thisSvc = (cachedState.serviceTypes || []).find(s => s.id === serviceId);
-        const currentGroup = thisSvc ? domNameToGroup.get(cleanN(thisSvc.name)) : null;
+        const suggestCats = cachedState.serviceCategories || [];
+        const suggestCatName = thisSvc ? suggestCats.find(c => c.id === thisSvc.categoryId)?.name : null;
+        const currentGroup = thisSvc ? (domNameToGroup.get(cleanN(thisSvc.name)) || suggestCatName) : null;
         tipEl.textContent = `💡 Próximo no rodízio (${currentGroup || 'serviço'}): ${next.name}`;
       }
     }

@@ -52,6 +52,7 @@ function renderRanking() {
   const profs          = state.professionals || [];
   const counters       = state.counters || {};
   const serviceGroupsMap = state.serviceGroups || {}; // { serviceId -> groupName }
+  const cats           = state.serviceCategories || [];
 
   if (!services.length || !profs.length) {
     grid.innerHTML = `
@@ -62,11 +63,12 @@ function renderRanking() {
     return;
   }
 
-  // Agrupa serviços: groupName -> { label, serviceIds, isGroup }
-  // Serviços sem grupo ficam como linha individual
+  // Agrupa serviços: prioridade DOM > categoria > individual
   const groupsMap = new Map();
   services.forEach(s => {
-    const groupName = serviceGroupsMap[s.id];
+    const domGroupName = serviceGroupsMap[s.id];
+    const catName      = cats.find(c => c.id === s.categoryId)?.name;
+    const groupName    = domGroupName || catName;
     if (groupName) {
       if (!groupsMap.has(groupName)) {
         groupsMap.set(groupName, { label: groupName, serviceIds: [], isGroup: true });
@@ -302,8 +304,58 @@ function exportHistory() {
 
 // ── CONFIGURAÇÕES ─────────────────────────────────────────────────────
 function renderSettings() {
+  renderCategoryList();
   renderProfList();
   renderServiceList();
+  // Sincroniza o select de categoria no formulário de adicionar serviço
+  const catSelect = document.getElementById("newServiceCategory");
+  if (catSelect) {
+    const cats   = state.serviceCategories || [];
+    const saved  = catSelect.value;
+    catSelect.innerHTML = '<option value="">Sem categoria</option>' +
+      cats.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    catSelect.value = saved;
+  }
+}
+
+function renderCategoryList() {
+  const list = document.getElementById("categoryList");
+  if (!list) return;
+  const cats     = state.serviceCategories || [];
+  const services = state.serviceTypes || [];
+
+  if (!cats.length) {
+    list.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">Nenhuma categoria cadastrada</div>`;
+    return;
+  }
+
+  list.innerHTML = cats.map(c => {
+    const count = services.filter(s => s.categoryId === c.id).length;
+    return `
+    <div class="item-row">
+      <span class="item-label">${c.name}</span>
+      <span style="font-size:11px;color:var(--muted);background:var(--border);border-radius:20px;padding:1px 8px;white-space:nowrap;flex-shrink:0">
+        ${count} serviço${count !== 1 ? "s" : ""}
+      </span>
+      <button class="edit-btn" data-id="${c.id}" data-name="${escapeAttr(c.name)}" data-type="category" title="Renomear">✏️</button>
+      <button class="del-btn" data-id="${c.id}" title="Remover">🗑</button>
+    </div>`;
+  }).join("");
+
+  list.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => openInlineEdit(btn, "category"));
+  });
+  list.querySelectorAll(".del-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const count = services.filter(s => s.categoryId === btn.dataset.id).length;
+      const msg = count > 0
+        ? `Remover esta categoria? Os ${count} serviço(s) vinculados ficarão sem categoria.`
+        : "Remover esta categoria?";
+      if (confirm(msg)) {
+        chrome.runtime.sendMessage({ action: "removeServiceCategory", id: btn.dataset.id }, () => loadState());
+      }
+    });
+  });
 }
 
 function renderProfList() {
@@ -346,18 +398,24 @@ function renderProfList() {
 function renderServiceList() {
   const list     = document.getElementById("serviceList");
   const services = state.serviceTypes || [];
+  const cats     = state.serviceCategories || [];
 
   if (!services.length) {
     list.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">Nenhum serviço cadastrado</div>`;
     return;
   }
 
-  list.innerHTML = services.map(s => `
+  list.innerHTML = services.map(s => {
+    const cat = cats.find(c => c.id === s.categoryId);
+    const catBadge = cat ? `<span class="cat-badge">${cat.name}</span>` : "";
+    return `
     <div class="item-row">
       <span class="item-label">${s.name}</span>
+      ${catBadge}
       <button class="edit-btn" data-id="${s.id}" data-name="${escapeAttr(s.name)}" data-type="service" title="Renomear">✏️</button>
       <button class="del-btn" data-id="${s.id}" title="Remover">🗑</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 
   list.querySelectorAll(".edit-btn").forEach(btn => {
     btn.addEventListener("click", () => openInlineEdit(btn, "service"));
@@ -403,12 +461,27 @@ document.getElementById("newProfName").addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("addProfBtn").click();
 });
 
-// ── ADICIONAR SERVIÇO ─────────────────────────────────────────────────
-document.getElementById("addServiceBtn").addEventListener("click", () => {
-  const input = document.getElementById("newServiceName");
+// ── ADICIONAR CATEGORIA ───────────────────────────────────────────────
+document.getElementById("addCategoryBtn").addEventListener("click", () => {
+  const input = document.getElementById("newCategoryName");
   const name  = input.value.trim();
   if (!name) return;
-  chrome.runtime.sendMessage({ action: "addServiceType", name }, () => {
+  chrome.runtime.sendMessage({ action: "addServiceCategory", name }, () => {
+    input.value = "";
+    loadState();
+  });
+});
+document.getElementById("newCategoryName").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("addCategoryBtn").click();
+});
+
+// ── ADICIONAR SERVIÇO ─────────────────────────────────────────────────
+document.getElementById("addServiceBtn").addEventListener("click", () => {
+  const input      = document.getElementById("newServiceName");
+  const name       = input.value.trim();
+  if (!name) return;
+  const categoryId = document.getElementById("newServiceCategory")?.value || null;
+  chrome.runtime.sendMessage({ action: "addServiceType", name, categoryId: categoryId || null }, () => {
     input.value = "";
     loadState();
   });
@@ -466,7 +539,9 @@ function openInlineEdit(btn, type) {
   function save() {
     const newName = input.value.trim();
     if (!newName || newName === oldName) { cancel(); return; }
-    const action = type === "prof" ? "renameProfessional" : "renameServiceType";
+    const action = type === "prof" ? "renameProfessional" :
+                   type === "service" ? "renameServiceType" :
+                   "renameServiceCategory";
     chrome.runtime.sendMessage({ action, id, name: newName }, () => loadState());
   }
 
@@ -641,11 +716,13 @@ function updateGroupCheck(groupEl) {
 
 function groupServices(services) {
   const svcGroups = state.serviceGroups || {}; // { rodizioId -> groupName } do storage
+  const cats      = state.serviceCategories || [];
   const map = {};
   services.forEach(s => {
-    // Usa o grupo do storage (sincronizado do DOM da página pelo content.js)
-    // Fallback: prefixo antes de " - " ou "Geral"
+    // Prioridade: grupo do DOM Avec > categoria manual > prefixo do nome > "Geral"
+    const catName = cats.find(c => c.id === s.categoryId)?.name;
     const cat = svcGroups[s.id]
+      || catName
       || (s.name.includes(" - ") || s.name.includes(" – ")
           ? s.name.split(/\s*[-–]\s*/)[0].trim()
           : "Geral");
@@ -752,12 +829,27 @@ function extractNamesFromCsv(rows) {
     .filter(n => n.length > 0);
 }
 
-function showImportPreview(profNames, servNames) {
+// Extrai colunas "nome" e "categoria" de um CSV de serviços
+function extractServicesFromCsv(rows) {
+  if (!rows.length) return null;
+  const header = rows[0].map(h => h.toLowerCase().replace(/["']/g, '').trim());
+  const nomeCol = header.findIndex(h => h === 'nome' || h === 'name');
+  if (nomeCol === -1) return null;
+  const catCol = header.findIndex(h => h === 'categoria' || h === 'category');
+  return rows.slice(1)
+    .map(r => ({
+      name:      (r[nomeCol] || '').replace(/^"|"$/g, '').trim(),
+      categoria: catCol >= 0 ? (r[catCol] || '').replace(/^"|"$/g, '').trim() : ''
+    }))
+    .filter(s => s.name.length > 0);
+}
+
+function showImportPreview(profNames, services) {
   chrome.runtime.sendMessage({ action: 'getState' }, (s) => {
     const existingProfs = (s.professionals || []).map(p => p.name.toLowerCase());
     const existingSvcs  = (s.serviceTypes  || []).map(sv => sv.name.toLowerCase());
 
-    const renderList = (names, existing, elId) => {
+    const renderProfList = (names, existing, elId) => {
       const el = document.getElementById(elId);
       if (!names || !names.length) {
         el.innerHTML = `<div class="preview-item existing"><div class="dot"></div>Nenhum item encontrado</div>`;
@@ -771,11 +863,27 @@ function showImportPreview(profNames, servNames) {
       }).join('');
     };
 
-    renderList(profNames, existingProfs, 'previewProfs');
-    renderList(servNames, existingSvcs, 'previewServices');
+    const renderSvcList = (svcs, existing, elId) => {
+      const el = document.getElementById(elId);
+      if (!svcs || !svcs.length) {
+        el.innerHTML = `<div class="preview-item existing"><div class="dot"></div>Nenhum item encontrado</div>`;
+        return;
+      }
+      el.innerHTML = svcs.map(svc => {
+        const isNew = !existing.includes(svc.name.toLowerCase());
+        const catLabel = svc.categoria
+          ? ` <small style="color:#a78bfa">[${svc.categoria}]</small>` : '';
+        return `<div class="preview-item ${isNew ? 'new' : 'existing'}">
+          <div class="dot"></div>${svc.name}${catLabel}${!isNew ? ' <small>(já existe)</small>' : ''}
+        </div>`;
+      }).join('');
+    };
+
+    renderProfList(profNames, existingProfs, 'previewProfs');
+    renderSvcList(services, existingSvcs, 'previewServices');
 
     const newP = (profNames||[]).filter(n => !existingProfs.includes(n.toLowerCase())).length;
-    const newS = (servNames||[]).filter(n => !existingSvcs.includes(n.toLowerCase())).length;
+    const newS = (services||[]).filter(s => !existingSvcs.includes(s.name.toLowerCase())).length;
     document.getElementById('uploadMsg').textContent =
       `${newP} profissional(is) e ${newS} serviço(s) novos serão adicionados.`;
 
@@ -818,22 +926,22 @@ document.getElementById('gsImportBtn').addEventListener('click', async () => {
     const profNames = profCsv.status === 'fulfilled'
       ? extractNamesFromCsv(parseCsv(profCsv.value))
       : null;
-    const servNames = servCsv.status === 'fulfilled'
-      ? extractNamesFromCsv(parseCsv(servCsv.value))
+    const services = servCsv.status === 'fulfilled'
+      ? extractServicesFromCsv(parseCsv(servCsv.value))
       : null;
 
-    if (!profNames && !servNames) {
+    if (!profNames && !services) {
       throw new Error('Nenhuma aba "Profissionais" ou "Servicos" encontrada. Verifique os nomes das abas e se o acesso está público.');
     }
     if (profCsv.status === 'fulfilled' && profNames === null) {
       throw new Error('Aba "Profissionais" encontrada, mas não tem coluna "nome" no cabeçalho.');
     }
-    if (servCsv.status === 'fulfilled' && servNames === null) {
+    if (servCsv.status === 'fulfilled' && services === null) {
       throw new Error('Aba "Servicos" encontrada, mas não tem coluna "nome" no cabeçalho.');
     }
 
-    _importData = { profissionais: profNames || [], servicos: servNames || [] };
-    showImportPreview(profNames, servNames);
+    _importData = { profissionais: profNames || [], servicos: services || [] };
+    showImportPreview(profNames, services);
 
   } catch(err) {
     errEl.textContent = `❌ ${err.message}`;
@@ -856,9 +964,16 @@ document.getElementById('confirmImportBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'getState' }, (s) => {
     const existingProfs = (s.professionals || []).map(p => p.name.toLowerCase());
     const existingSvcs  = (s.serviceTypes  || []).map(sv => sv.name.toLowerCase());
+    const existingCats  = s.serviceCategories || [];
 
     const newProfs = profissionais.filter(n => !existingProfs.includes(n.toLowerCase()));
-    const newSvcs  = servicos.filter(n => !existingSvcs.includes(n.toLowerCase()));
+    const newSvcs  = servicos.filter(svc => !existingSvcs.includes(svc.name.toLowerCase()));
+
+    // Categorias únicas dos serviços que ainda não existem
+    const catNames = [...new Set(newSvcs.map(svc => svc.categoria).filter(Boolean))];
+    const newCatNames = catNames.filter(cn =>
+      !existingCats.find(c => c.name.toLowerCase() === cn.toLowerCase())
+    );
 
     const addAll = (items, action, done) => {
       if (!items.length) { done(); return; }
@@ -866,17 +981,174 @@ document.getElementById('confirmImportBtn').addEventListener('click', () => {
       chrome.runtime.sendMessage({ action, name: first }, () => addAll(rest, action, done));
     };
 
+    const addSvcs = (svcs, allCats, done) => {
+      if (!svcs.length) { done(); return; }
+      const [first, ...rest] = svcs;
+      const cat = allCats.find(c => c.name.toLowerCase() === (first.categoria || '').toLowerCase());
+      chrome.runtime.sendMessage(
+        { action: 'addServiceType', name: first.name, categoryId: cat?.id || null },
+        () => addSvcs(rest, allCats, done)
+      );
+    };
+
     addAll(newProfs, 'addProfessional', () => {
-      addAll(newSvcs, 'addServiceType', () => {
-        document.getElementById('uploadPreview').style.display = 'none';
-        document.getElementById('gsLinkInput').value = '';
-        _importData = { profissionais: [], servicos: [] };
-        loadState();
+      addAll(newCatNames, 'addServiceCategory', () => {
+        // Busca estado atualizado para ter os IDs das categorias recém-criadas
+        chrome.runtime.sendMessage({ action: 'getState' }, (fresh) => {
+          const allCats = fresh.serviceCategories || [];
+          addSvcs(newSvcs, allCats, () => {
+            document.getElementById('uploadPreview').style.display = 'none';
+            document.getElementById('gsLinkInput').value = '';
+            _importData = { profissionais: [], servicos: [] };
+            loadState();
+          });
+        });
       });
     });
   });
 });
 
+
+// ── DOWNLOAD PLANILHA MODELO ODS ──────────────────────────────────────
+
+function crc32(data) {
+  if (!crc32._t) {
+    crc32._t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      crc32._t[i] = c;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) crc = crc32._t[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function buildZip(files) {
+  // files: [{ name: string, data: Uint8Array, store: bool }]
+  const enc = new TextEncoder();
+  const entries = [];
+
+  // Local file headers + data
+  const localChunks = [];
+  let offset = 0;
+  for (const f of files) {
+    const nameBytes = enc.encode(f.name);
+    const data = f.data;
+    const crc  = crc32(data);
+    const now  = new Date();
+    const dt   = ((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+    const tm   = (now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1);
+
+    const hdr = new Uint8Array(30 + nameBytes.length);
+    const v   = new DataView(hdr.buffer);
+    v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true);
+    v.setUint16(6, 0, true); v.setUint16(8, 0, true); // STORE
+    v.setUint16(10, tm, true); v.setUint16(12, dt, true);
+    v.setUint32(14, crc, true); v.setUint32(18, data.length, true);
+    v.setUint32(22, data.length, true); v.setUint16(26, nameBytes.length, true);
+    v.setUint16(28, 0, true);
+    hdr.set(nameBytes, 30);
+
+    entries.push({ nameBytes, data, crc, dt, tm, offset });
+    offset += hdr.length + data.length;
+    localChunks.push(hdr, data);
+  }
+
+  // Central directory
+  const cdChunks = [];
+  const cdStart = offset;
+  for (const e of entries) {
+    const cdhdr = new Uint8Array(46 + e.nameBytes.length);
+    const v = new DataView(cdhdr.buffer);
+    v.setUint32(0, 0x02014b50, true); v.setUint16(4, 20, true); v.setUint16(6, 20, true);
+    v.setUint16(8, 0, true); v.setUint16(10, 0, true);
+    v.setUint16(12, e.tm, true); v.setUint16(14, e.dt, true);
+    v.setUint32(16, e.crc, true); v.setUint32(20, e.data.length, true);
+    v.setUint32(24, e.data.length, true); v.setUint16(28, e.nameBytes.length, true);
+    v.setUint16(30, 0, true); v.setUint16(32, 0, true); v.setUint16(34, 0, true);
+    v.setUint16(36, 0, true); v.setUint32(38, 0, true); v.setUint32(42, e.offset, true);
+    cdhdr.set(e.nameBytes, 46);
+    cdChunks.push(cdhdr);
+    offset += cdhdr.length;
+  }
+
+  const cdSize = offset - cdStart;
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, cdStart, true); ev.setUint16(20, 0, true);
+
+  const all = [...localChunks, ...cdChunks, eocd];
+  const total = all.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const c of all) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+
+function generateOdsTemplate() {
+  const enc = new TextEncoder();
+  const mimetype = 'application/vnd.oasis.opendocument.spreadsheet';
+
+  const manifest = `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">
+  <manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet" manifest:version="1.3"/>
+  <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+</manifest:manifest>`;
+
+  function cell(val) {
+    return `<table:table-cell office:value-type="string"><text:p>${val}</text:p></table:table-cell>`;
+  }
+  function row(...vals) {
+    return `<table:table-row>${vals.map(cell).join('')}</table:table-row>`;
+  }
+
+  const content = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  office:version="1.3">
+  <office:body><office:spreadsheet>
+    <table:table table:name="Profissionais">
+      <table:table-column/>
+      ${row('nome')}
+      ${row('Ana Silva')}
+      ${row('Carla Santos')}
+      ${row('Marcos Oliveira')}
+    </table:table>
+    <table:table table:name="Servicos">
+      <table:table-column table:number-columns-repeated="2"/>
+      ${row('nome','categoria')}
+      ${row('Corte','Cabelo')}
+      ${row('Coloração','Cabelo')}
+      ${row('Escova','Cabelo')}
+      ${row('Manicure','Unhas')}
+      ${row('Pedicure','Unhas')}
+      ${row('Depilação','Estética')}
+    </table:table>
+  </office:spreadsheet></office:body>
+</office:document-content>`;
+
+  return buildZip([
+    { name: 'mimetype',              data: enc.encode(mimetype) },
+    { name: 'META-INF/manifest.xml', data: enc.encode(manifest) },
+    { name: 'content.xml',           data: enc.encode(content)  },
+  ]);
+}
+
+document.getElementById('gsTemplateLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  const bytes = generateOdsTemplate();
+  const blob  = new Blob([bytes], { type: 'application/vnd.oasis.opendocument.spreadsheet' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url; a.download = 'modelo-rodizio-avec.ods'; a.click();
+  URL.revokeObjectURL(url);
+});
 
 // ── INIT ──────────────────────────────────────────────────────────────
 loadState();

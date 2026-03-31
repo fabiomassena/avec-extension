@@ -8,11 +8,12 @@
 // history:       [{ id, date, client, serviceTypeId, serviceTypeName, professionalId, professionalName, source }]
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(["professionals", "serviceTypes", "counters", "history"], (data) => {
-    if (!data.professionals) chrome.storage.local.set({ professionals: [] });
-    if (!data.serviceTypes)  chrome.storage.local.set({ serviceTypes: [] });
-    if (!data.counters)      chrome.storage.local.set({ counters: {} });
-    if (!data.history)       chrome.storage.local.set({ history: [] });
+  chrome.storage.local.get(["professionals", "serviceTypes", "counters", "history", "serviceCategories"], (data) => {
+    if (!data.professionals)     chrome.storage.local.set({ professionals: [] });
+    if (!data.serviceTypes)      chrome.storage.local.set({ serviceTypes: [] });
+    if (!data.counters)          chrome.storage.local.set({ counters: {} });
+    if (!data.history)           chrome.storage.local.set({ history: [] });
+    if (!data.serviceCategories) chrome.storage.local.set({ serviceCategories: [] });
   });
 });
 
@@ -22,7 +23,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     case "getState":
       chrome.storage.local.get(
-        ["professionals", "serviceTypes", "counters", "history", "lastServed", "profServices", "serviceGroups"],
+        ["professionals", "serviceTypes", "counters", "history", "lastServed", "profServices", "serviceGroups", "serviceCategories"],
         (data) => sendResponse(data)
       );
       return true;
@@ -40,11 +41,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
 
     case "addServiceType":
-      addServiceType(msg.name, sendResponse);
+      addServiceType(msg.name, msg.categoryId || null, sendResponse);
       return true;
 
     case "removeServiceType":
       removeServiceType(msg.id, sendResponse);
+      return true;
+
+    case "addServiceCategory":
+      addServiceCategory(msg.name, sendResponse);
+      return true;
+
+    case "removeServiceCategory":
+      removeServiceCategory(msg.id, sendResponse);
+      return true;
+
+    case "renameServiceCategory":
+      renameServiceCategory(msg.id, msg.name, sendResponse);
       return true;
 
     case "renameProfessional":
@@ -118,14 +131,16 @@ function toggleProfessional(id, cb) {
   });
 }
 
-function addServiceType(name, cb) {
+function addServiceType(name, categoryId, cb) {
   chrome.storage.local.get(["serviceTypes", "counters", "professionals"], (data) => {
     const serviceTypes = data.serviceTypes || [];
     const counters = data.counters || {};
     const professionals = data.professionals || [];
 
     const id = "st_" + Date.now();
-    serviceTypes.push({ id, name });
+    const entry = { id, name };
+    if (categoryId) entry.categoryId = categoryId;
+    serviceTypes.push(entry);
 
     // Inicializa contadores zerados para todos os profissionais
     counters[id] = {};
@@ -197,6 +212,36 @@ function renameProfessional(id, newName, cb) {
       h.professionalId === id ? { ...h, professionalName: newName } : h
     );
     chrome.storage.local.set({ professionals, history }, () => cb({ ok: true }));
+  });
+}
+
+function addServiceCategory(name, cb) {
+  chrome.storage.local.get("serviceCategories", (data) => {
+    const cats = data.serviceCategories || [];
+    const id = "sc_" + Date.now();
+    cats.push({ id, name });
+    chrome.storage.local.set({ serviceCategories: cats }, () => cb({ ok: true, id }));
+  });
+}
+
+function removeServiceCategory(id, cb) {
+  chrome.storage.local.get(["serviceCategories", "serviceTypes"], (data) => {
+    const cats = (data.serviceCategories || []).filter(c => c.id !== id);
+    const serviceTypes = (data.serviceTypes || []).map(s => {
+      if (s.categoryId !== id) return s;
+      const { categoryId, ...rest } = s;
+      return rest;
+    });
+    chrome.storage.local.set({ serviceCategories: cats, serviceTypes }, () => cb({ ok: true }));
+  });
+}
+
+function renameServiceCategory(id, newName, cb) {
+  chrome.storage.local.get("serviceCategories", (data) => {
+    const cats = (data.serviceCategories || []).map(c =>
+      c.id === id ? { ...c, name: newName } : c
+    );
+    chrome.storage.local.set({ serviceCategories: cats }, () => cb({ ok: true }));
   });
 }
 

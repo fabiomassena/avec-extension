@@ -170,6 +170,26 @@ main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
   outline:none;
 }
 .add-row input:focus { border-color:var(--purple); }
+.add-row-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius:8px;
+  color:var(--text);
+  padding:8px 10px;
+  font-size:13px;
+  outline:none;
+  max-width:150px;
+}
+.add-row-select:focus { border-color:var(--purple); }
+.cat-badge {
+  font-size:10px;
+  background: rgba(124,58,237,0.15);
+  color: var(--purple-pale);
+  border-radius:20px;
+  padding:2px 8px;
+  white-space:nowrap;
+  flex-shrink:0;
+}
 .btn-add {
   background:var(--purple); color:#fff;
   border:none; border-radius:8px;
@@ -713,11 +733,13 @@ main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
       <h3>📊 Importar via Google Sheets</h3>
       <p class="upload-desc">
         Cole o link de uma planilha do Google Sheets com duas abas:
-        <strong>Profissionais</strong> e <strong>Servicos</strong> — cada uma com uma coluna <code>nome</code>.<br>
+        <strong>Profissionais</strong> (coluna <code>nome</code>) e
+        <strong>Servicos</strong> (colunas <code>nome</code> e <code>categoria</code>).<br>
         A planilha deve estar com acesso <strong>"Qualquer pessoa com o link pode ver"</strong>.
+        Baixe o modelo abaixo para ver o formato correto.
       </p>
-      <a class="gs-template-link" id="gsTemplateLink" href="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/edit" target="_blank">
-        📋 Abrir planilha modelo no Google Sheets
+      <a class="gs-template-link" id="gsTemplateLink" href="#" style="cursor:pointer">
+        📥 Baixar planilha modelo (.ods)
       </a>
       <div class="gs-input-row">
         <input type="text" id="gsLinkInput" placeholder="Cole aqui o link da sua planilha do Google Sheets..." />
@@ -745,6 +767,16 @@ main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
       <div id="uploadError" class="upload-error" style="display:none"></div>
     </div>
 
+    <!-- Categorias de serviço -->
+    <div class="settings-card" style="margin-bottom:24px">
+      <h3>🏷️ Categorias de Serviço</h3>
+      <div class="add-row">
+        <input type="text" id="newCategoryName" placeholder="Ex: Cabelo, Estética, Unhas" />
+        <button class="btn-add" id="addCategoryBtn">+ Adicionar</button>
+      </div>
+      <div class="item-list" id="categoryList"></div>
+    </div>
+
     <div class="settings-grid">
       <!-- Profissionais -->
       <div class="settings-card">
@@ -760,6 +792,9 @@ main { max-width: 1100px; margin: 32px auto; padding: 0 24px; }
         <h3>✂️ Tipos de Serviço</h3>
         <div class="add-row">
           <input type="text" id="newServiceName" placeholder="Ex: Corte, Escova, Coloração" />
+          <select id="newServiceCategory" class="add-row-select">
+            <option value="">Sem categoria</option>
+          </select>
           <button class="btn-add" id="addServiceBtn">+ Adicionar</button>
         </div>
         <div class="item-list" id="serviceList"></div>
