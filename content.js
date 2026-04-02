@@ -99,7 +99,7 @@
       const group = domNameToGroup.get(cleanN(s.name));
       if (group) groupsObj[s.id] = group;
     });
-    chrome.storage.local.set({ serviceGroups: groupsObj });
+    if (chrome?.storage?.local) chrome.storage.local.set({ serviceGroups: groupsObj });
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -165,25 +165,55 @@
   // FUNÇÃO PARA PEGAR NOME DO CLIENTE
   // ════════════════════════════════════════════════════════════════════
   function getClienteNome() {
-    // Modo edição
+    // Modo edição - cliente já salvo
     const blocknome = document.querySelector(".blocknome");
     if (blocknome) {
       const nome = blocknome.textContent.replace(/^cliente:\s*/i, "").trim();
-      if (nome) return nome;
+      if (nome && nome !== "Cliente") return nome;
     }
-    
-    // Modo criação - campo de busca
-    const clienteInput = document.getElementById("slcCliente");
+
+    // Modo criação - campo de busca (vários seletores possíveis)
+
+    // Tenta 1: slcCliente (select ou input)
+    const slcCliente = document.getElementById("slcCliente");
+    if (slcCliente) {
+      if (slcCliente.tagName === "SELECT") {
+        const selected = slcCliente.options[slcCliente.selectedIndex];
+        if (selected && selected.text && selected.text !== "Selecione:" && selected.text !== "Selecione o cliente") {
+          return selected.text.trim();
+        }
+      } else if (slcCliente.value && slcCliente.value.trim()) {
+        return slcCliente.value.trim();
+      }
+    }
+
+    // Tenta 2: sltCliente (select comum no Avec)
+    const sltCliente = document.getElementById("sltCliente");
+    if (sltCliente && sltCliente.tagName === "SELECT") {
+      const selected = sltCliente.options[sltCliente.selectedIndex];
+      if (selected && selected.text && selected.text !== "Selecione:" && selected.text !== "Selecione o cliente") {
+        return selected.text.trim();
+      }
+    }
+
+    // Tenta 3: Input de busca do cliente (Chosen UI)
+    const chosenInput = document.querySelector("#sltCliente_chosen input, #slcCliente_chosen input");
+    if (chosenInput && chosenInput.value) {
+      return chosenInput.value.trim();
+    }
+
+    // Tenta 4: Campo de texto do cliente
+    const clienteInput = document.querySelector("input[name='cliente'], input[id^='cliente'], .cliente-input, input.placeholder[data*='cliente' i]");
     if (clienteInput && clienteInput.value) {
       return clienteInput.value.trim();
     }
-    
-    // Fallback
+
+    // Tenta 5: Typeahead genérico
     const typeaheadField = document.querySelector(".typeahead-field input");
     if (typeaheadField && typeaheadField.value) {
       return typeaheadField.value.trim();
     }
-    
+
     return "";
   }
 
@@ -287,14 +317,14 @@
   // ════════════════════════════════════════════════════════════════════
   function monitorModal() {
     let lastModalState = false;
-    
+
     setInterval(() => {
       const modal = document.getElementById("popupModal");
       if (!modal) return;
-      
-      const isVisible = modal.style.display !== "none" && 
+
+      const isVisible = modal.style.display !== "none" &&
                         window.getComputedStyle(modal).display !== "none";
-      
+
       if (isVisible && !lastModalState) {
         lastModalState = true;
         loadServiceGroups(); // Recarrega grupos ao abrir
@@ -302,6 +332,8 @@
       } else if (!isVisible && lastModalState) {
         lastModalState = false;
         hideTip();
+        // Reset da flag quando modal é fechado
+        capturedAppointmentId = null;
       }
     }, 500);
   }
@@ -379,53 +411,146 @@
   // ════════════════════════════════════════════════════════════════════
   // CAPTURA AUTOMÁTICA
   // ════════════════════════════════════════════════════════════════════
+  
+  // Flag para controlar se já capturou este agendamento
+  let capturedAppointmentId = null;
+  
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("#btnSalvar");
     if (btn) {
-      setTimeout(captureFromModal, 700);
+      // Verifica se é modal de edição (já tem agendamento existente)
+      const isEditMode = document.querySelector("input[name='id'], input[name='agenda_id'], input[id^='agenda']");
+      
+      if (isEditMode) {
+        return;
+      }
+      
+      // Verifica se o status "Cancelado" está selecionado
+      // Na screenshot, o botão "Cancelado" tem id="statusCancelado" e value="0"
+      const canceladoRadio = document.querySelector("input[value='Cancelado']:checked");
+      const canceladoById = document.querySelector("#statusCancelado:checked");
+      const statusRadios = document.querySelectorAll("input[name='status']:checked");
+      let statusSelecionado = null;
+      
+      statusRadios.forEach(radio => {
+        statusSelecionado = radio.value;
+      });
+      
+      // Verifica se é cancelado (valor pode ser "0", "6", "7", "Cancelado", etc.)
+      const isCancelado = canceladoRadio || 
+                          canceladoById ||
+                          (statusSelecionado && 
+                           (statusSelecionado.toString() === "0" || 
+                            statusSelecionado.toString() === "6" || 
+                            statusSelecionado.toString() === "7" ||
+                            statusSelecionado.toLowerCase().includes("cancel")));
+      
+      if (isCancelado) {
+        return;
+      }
+      
+      // Verifica se já capturou este mesmo agendamento
+      const serviceSelect = document.getElementById("sltServico");
+      const currentId = serviceSelect?.value;
+      
+      if (capturedAppointmentId === currentId) {
+        return;
+      }
+      
+      const snapshot = captureFormSnapshot();
+      if (snapshot) {
+        capturedAppointmentId = currentId;
+        setTimeout(() => sendToBackground(snapshot), 700);
+      }
     }
   }, true);
 
-  function captureFromModal() {
+  function captureFormSnapshot() {
     let servicoId = null;
     let servicoNome = "";
-    
+
     const serviceSelect = document.getElementById("sltServico");
     if (serviceSelect && serviceSelect.selectedIndex >= 0) {
-      servicoId = serviceSelect.options[serviceSelect.selectedIndex]?.value;
-      let raw = serviceSelect.options[serviceSelect.selectedIndex]?.text?.trim() || "";
-      servicoNome = raw.replace(/\s*[-–]\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim();
+      const opt = serviceSelect.options[serviceSelect.selectedIndex];
+      servicoId = opt?.value;
+      if (servicoId) {
+        const raw = opt?.text?.trim() || "";
+        servicoNome = raw.replace(/\s*[-–]\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim();
+      }
     }
-    
+
     let profId = null;
     let profNome = "";
-    
-    const profSelect = document.getElementById("sltProf");
+
+    // Tenta 1: name="prof" (modal de edição - profissional único)
+    const profSelect = document.querySelector("select[name='prof']");
     if (profSelect && profSelect.selectedIndex >= 0) {
-      profId = profSelect.options[profSelect.selectedIndex]?.value;
-      profNome = profSelect.options[profSelect.selectedIndex]?.text?.trim() || "";
+      const opt = profSelect.options[profSelect.selectedIndex];
+      profId = opt?.value;
+      profNome = opt?.text?.trim() || "";
     }
     
+    // Tenta 2: name="prof[]" (modal de criação - múltiplos profissionais)
+    if (!profId) {
+      const profArraySelect = document.querySelector("select[name='prof[]']");
+      if (profArraySelect && profArraySelect.selectedIndex >= 0) {
+        const opt = profArraySelect.options[profArraySelect.selectedIndex];
+        profId = opt?.value;
+        profNome = opt?.text?.trim() || "";
+      }
+    }
+    
+    // Tenta 3: sltProf (fallback para versões antigas)
+    if (!profId) {
+      const sltProf = document.getElementById("sltProf");
+      if (sltProf && sltProf.selectedIndex >= 0) {
+        const opt = sltProf.options[sltProf.selectedIndex];
+        profId = opt?.value;
+        profNome = opt?.text?.trim() || "";
+      }
+    }
+    
+    // Tenta 4: slcProf (fallback para versões antigas)
+    if (!profId) {
+      const slcProf = document.getElementById("slcProf");
+      if (slcProf && slcProf.selectedIndex >= 0) {
+        const opt = slcProf.options[slcProf.selectedIndex];
+        profId = opt?.value;
+        profNome = opt?.text?.trim() || "";
+      }
+    }
+    
+    // Tenta 5: Chosen UI para profissional
+    if (!profId) {
+      const profChosenInput = document.querySelector("#sltProf_chosen input, #slcProf_chosen input");
+      if (profChosenInput && profChosenInput.value) {
+        profNome = profChosenInput.value.trim();
+      }
+    }
+
     const clienteNome = getClienteNome();
-    
-    if (!servicoId || !profId) {
-      showToast("⚠️ Selecione serviço e profissional antes de salvar");
-      return;
+
+    // Serviço é obrigatório, profissional e cliente são opcionais
+    // Se não tiver profissional, o rodízio vai sugerir o próximo
+    if (!servicoId) {
+      return null;
     }
-    
-    sendToBackground({ 
-      client: clienteNome, 
+
+    return {
+      client: clienteNome,
       serviceTypeId: servicoId,
-      serviceTypeName: servicoNome, 
+      serviceTypeName: servicoNome,
       professionalId: profId,
-      professionalName: profNome, 
-      source: "auto" 
-    });
+      professionalName: profNome,
+      source: "auto"
+    };
   }
 
   function sendToBackground(appt) {
     safeSendMessage({ action: "getState" }, (state) => {
-      if (!state) return;
+      if (!state) {
+        return;
+      }
       cachedState = state;
 
       const cleanN = n => n.replace(/\s*-\s*\d+\s*min\.?\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -435,10 +560,12 @@
         const search = cleanN(appt.serviceTypeName);
         return sName === search || sName.includes(search) || search.includes(sName);
       });
-      const matchProf = (state.professionals || []).find(p =>
-        p.name.toLowerCase() === appt.professionalName.toLowerCase() ||
-        appt.professionalName.toLowerCase().includes(p.name.toLowerCase())
-      );
+      
+      const matchProf = (state.professionals || []).find(p => {
+        const pName = p.name.toLowerCase();
+        const searchName = appt.professionalName.toLowerCase();
+        return pName === searchName || searchName.includes(pName);
+      });
 
       if (!matchService || !matchProf) {
         showToast(`⚠️ Não foi possível registrar: ${appt.serviceTypeName} → ${appt.professionalName}`);
@@ -455,8 +582,13 @@
           professionalName: matchProf.name,
           source: appt.source
         }
-      }, () => {
-        showToast(`✅ Registrado: ${matchProf.name} → ${matchService.name}`);
+      }, (response) => {
+        if (response?.ok) {
+          const clienteMsg = appt.client ? ` (${appt.client})` : "";
+          showToast(`✅ Registrado: ${matchProf.name} → ${matchService.name}${clienteMsg}`);
+        } else {
+          showToast(`❌ Erro: ${response?.msg || 'Falha desconhecida'}`);
+        }
         setTimeout(() => {
           const serviceChosen = document.getElementById("sltServico_chosen");
           if (serviceChosen) {
@@ -693,9 +825,9 @@
     toastEl.id = "avec-rodizio-toast";
     document.body.appendChild(toastEl);
 
-    const btn = document.getElementById("avec-rodizio-btn");
-    if (btn) {
-      btn.addEventListener("click", () => {
+    const fabBtn = document.getElementById("avec-rodizio-btn");
+    if (fabBtn) {
+      fabBtn.addEventListener("click", () => {
         const modal = document.getElementById("avec-rodizio-modal");
         if (modal.classList.contains("open")) {
           modal.classList.remove("open");
@@ -738,7 +870,8 @@
         const modal = document.getElementById("avec-rodizio-modal");
         modal.classList.remove("open");
         modal.style.display = "none";
-        showToast(`✅ ${profName} → ${serviceName}`);
+        const clienteMsg = clientEl?.value ? ` (${clientEl.value.trim()})` : "";
+        showToast(`✅ ${profName} → ${serviceName}${clienteMsg}`);
       });
     });
   }

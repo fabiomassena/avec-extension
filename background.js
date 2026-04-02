@@ -28,6 +28,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       );
       return true;
 
+    case "debugStorage":
+      // Função utilitária para inspecionar o storage via console
+      chrome.storage.local.get(null, (allData) => {
+        console.log("[DEBUG STORAGE] Conteúdo completo do storage:", allData);
+        sendResponse({ ok: true, data: allData });
+      });
+      return true;
+
     case "addProfessional":
       addProfessional(msg.name, sendResponse);
       return true;
@@ -66,6 +74,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     case "renameServiceType":
       renameServiceType(msg.id, msg.name, sendResponse);
+      return true;
+
+    case "setServiceCategory":
+      setServiceCategory(msg.id, msg.categoryId, sendResponse);
       return true;
 
     case "registerAppointment":
@@ -161,10 +173,18 @@ function removeServiceType(id, cb) {
 
 function registerAppointment(appt, cb) {
   // appt: { client, serviceTypeId, serviceTypeName, professionalId, professionalName, source }
-  chrome.storage.local.get(["counters", "history", "lastServed"], (data) => {
+  chrome.storage.local.get(["counters", "history", "lastServed", "serviceTypes", "professionals"], (data) => {
     const counters   = data.counters   || {};
     const history    = data.history    || [];
     const lastServed = data.lastServed || {};
+
+    // Verifica se o serviceTypeId existe
+    const serviceExists = (data.serviceTypes || []).some(s => s.id === appt.serviceTypeId);
+    const profExists = (data.professionals || []).some(p => p.id === appt.professionalId);
+
+    if (!serviceExists || !profExists) {
+      return cb({ ok: false, msg: "IDs inválidos - serviço ou profissional não encontrado" });
+    }
 
     // Incrementa contador
     if (!counters[appt.serviceTypeId]) counters[appt.serviceTypeId] = {};
@@ -182,9 +202,12 @@ function registerAppointment(appt, cb) {
     // Atualiza último atendido
     lastServed[appt.serviceTypeId] = appt.professionalId;
 
-    chrome.storage.local.set({ counters, history, lastServed }, () =>
-      cb({ ok: true, entry })
-    );
+    chrome.storage.local.set({ counters, history, lastServed }, () => {
+      if (chrome.runtime.lastError) {
+        return cb({ ok: false, msg: chrome.runtime.lastError.message });
+      }
+      cb({ ok: true, entry });
+    });
   });
 }
 
@@ -212,6 +235,18 @@ function renameProfessional(id, newName, cb) {
       h.professionalId === id ? { ...h, professionalName: newName } : h
     );
     chrome.storage.local.set({ professionals, history }, () => cb({ ok: true }));
+  });
+}
+
+function setServiceCategory(id, categoryId, cb) {
+  chrome.storage.local.get("serviceTypes", (data) => {
+    const serviceTypes = (data.serviceTypes || []).map(s => {
+      if (s.id !== id) return s;
+      if (categoryId) return { ...s, categoryId };
+      const { categoryId: _, ...rest } = s;
+      return rest;
+    });
+    chrome.storage.local.set({ serviceTypes }, () => cb({ ok: true }));
   });
 }
 

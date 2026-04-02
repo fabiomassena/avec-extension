@@ -2,6 +2,34 @@
 
 let state = {};
 
+// ── DEBUG UTILS (disponíveis no console) ──────────────────────────────
+window.debugStorage = () => {
+  chrome.runtime.sendMessage({ action: "debugStorage" }, (res) => {
+    console.log("[DEBUG] Storage completo:", res?.data);
+  });
+};
+
+window.debugCounters = () => {
+  chrome.runtime.sendMessage({ action: "getState" }, (s) => {
+    console.log("[DEBUG] Contadores:", s?.counters);
+  });
+};
+
+window.debugHistory = () => {
+  chrome.runtime.sendMessage({ action: "getState" }, (s) => {
+    console.log("[DEBUG] Histórico:", s?.history);
+  });
+};
+
+window.debugClear = () => {
+  if (confirm("⚠️ TEM CERTEZA? Isso apagará TODOS os dados do rodízio!")) {
+    chrome.storage.local.clear(() => {
+      console.log("[DEBUG] Storage limpo. Recarregue o painel.");
+      alert("Storage limpo. Recarregue a página (F5).");
+    });
+  }
+};
+
 // ── TABS ──────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -51,7 +79,7 @@ function renderRanking() {
   const services       = state.serviceTypes || [];
   const profs          = state.professionals || [];
   const counters       = state.counters || {};
-  const serviceGroupsMap = state.serviceGroups || {}; // { serviceId -> groupName }
+  const serviceGroupsMap = state.serviceGroups || {};
   const cats           = state.serviceCategories || [];
 
   if (!services.length || !profs.length) {
@@ -201,6 +229,7 @@ function renderHistory() {
 
   const profs    = state.professionals || [];
   const services = state.serviceTypes  || [];
+  const history  = state.history || [];
 
   // Salva seleção atual antes de repopular
   const fProf = document.getElementById("filterProf");
@@ -405,18 +434,26 @@ function renderServiceList() {
     return;
   }
 
-  list.innerHTML = services.map(s => {
-    const cat = cats.find(c => c.id === s.categoryId);
-    const catBadge = cat ? `<span class="cat-badge">${cat.name}</span>` : "";
-    return `
+  list.innerHTML = services.map(s => `
     <div class="item-row">
       <span class="item-label">${s.name}</span>
-      ${catBadge}
+      <select class="cat-select" data-id="${s.id}">
+        ${cats.map(c => `<option value="${c.id}" ${s.categoryId === c.id ? "selected" : ""}>${c.name}</option>`).join("")}
+        <option value="" ${!s.categoryId ? "selected" : ""}>Sem categoria</option>
+      </select>
       <button class="edit-btn" data-id="${s.id}" data-name="${escapeAttr(s.name)}" data-type="service" title="Renomear">✏️</button>
       <button class="del-btn" data-id="${s.id}" title="Remover">🗑</button>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 
+  list.querySelectorAll(".cat-select").forEach(sel => {
+    sel.addEventListener("change", () => {
+      chrome.runtime.sendMessage({
+        action: "setServiceCategory",
+        id: sel.dataset.id,
+        categoryId: sel.value || null
+      }, () => loadState());
+    });
+  });
   list.querySelectorAll(".edit-btn").forEach(btn => {
     btn.addEventListener("click", () => openInlineEdit(btn, "service"));
   });
@@ -559,7 +596,6 @@ let _psGroupFilter   = "";
 
 function renderProfServices() {
   const profs    = state.professionals || [];
-  const services = state.serviceTypes  || [];
   const profSvcs = state.profServices  || {};
   const sidebar  = document.getElementById("psSidebarList");
   if (!sidebar) return;
@@ -794,27 +830,45 @@ async function fetchSheetCsv(sheetId, sheetName) {
   return await res.text();
 }
 
-// Parser CSV simples (lida com aspas e vírgulas dentro de células)
+// Parser CSV simples (lida com aspas, vírgulas e quebras de linha dentro de células)
 function parseCsv(text) {
   const rows = [];
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  for (const line of lines) {
-    const cells = [];
-    let cur = '', inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
-        else inQuote = !inQuote;
-      } else if (ch === ',' && !inQuote) {
-        cells.push(cur.trim()); cur = '';
+  let cells = [];
+  let cur = '';
+  let inQuote = false;
+  
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    
+    if (ch === '"') {
+      if (inQuote && text[i+1] === '"') {
+        cur += '"';
+        i++;
       } else {
-        cur += ch;
+        inQuote = !inQuote;
       }
+    } else if (ch === ',' && !inQuote) {
+      cells.push(cur.trim());
+      cur = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuote) {
+      if (cur || cells.length > 0) {
+        cells.push(cur.trim());
+        if (cells.length > 0) rows.push(cells);
+        cells = [];
+        cur = '';
+      }
+      if (ch === '\r' && text[i+1] === '\n') i++;
+    } else {
+      cur += ch;
     }
+  }
+  
+  // Última linha
+  if (cur || cells.length > 0) {
     cells.push(cur.trim());
     rows.push(cells);
   }
+  
   return rows;
 }
 
@@ -829,17 +883,24 @@ function extractNamesFromCsv(rows) {
     .filter(n => n.length > 0);
 }
 
-// Extrai colunas "nome" e "categoria" de um CSV de serviços
+// Extrai colunas "nome" e "categoria" de um CSV de serviços.
+// Cada linha deve ter nome e categoria explícitos.
 function extractServicesFromCsv(rows) {
   if (!rows.length) return null;
   const header = rows[0].map(h => h.toLowerCase().replace(/["']/g, '').trim());
   const nomeCol = header.findIndex(h => h === 'nome' || h === 'name');
   if (nomeCol === -1) return null;
-  const catCol = header.findIndex(h => h === 'categoria' || h === 'category');
+  const catCol = header.findIndex(h =>
+    ['categoria', 'category', 'grupo', 'group', 'tipo', 'type', 'cat'].includes(h)
+  );
+
+  const cleanVal  = raw => (raw || '').replace(/^"|"$/g, '').trim();
+  const cleanName = raw => cleanVal(raw).replace(/^[\s,;.\-–—*_|#>]+/, '').trim();
+
   return rows.slice(1)
     .map(r => ({
-      name:      (r[nomeCol] || '').replace(/^"|"$/g, '').trim(),
-      categoria: catCol >= 0 ? (r[catCol] || '').replace(/^"|"$/g, '').trim() : ''
+      name: cleanName(r[nomeCol]),
+      categoria: catCol >= 0 ? cleanVal(r[catCol]) : ''
     }))
     .filter(s => s.name.length > 0);
 }
@@ -966,13 +1027,18 @@ document.getElementById('confirmImportBtn').addEventListener('click', () => {
     const existingSvcs  = (s.serviceTypes  || []).map(sv => sv.name.toLowerCase());
     const existingCats  = s.serviceCategories || [];
 
-    const newProfs = profissionais.filter(n => !existingProfs.includes(n.toLowerCase()));
-    const newSvcs  = servicos.filter(svc => !existingSvcs.includes(svc.name.toLowerCase()));
+    // Normaliza nome para comparação (remove acentos, lowercase)
+    const normalize = str => str.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+    const newProfs = profissionais.filter(n => !existingProfs.includes(normalize(n)));
+    const newSvcs  = servicos.filter(svc => !existingSvcs.includes(normalize(svc.name)));
 
     // Categorias únicas dos serviços que ainda não existem
     const catNames = [...new Set(newSvcs.map(svc => svc.categoria).filter(Boolean))];
     const newCatNames = catNames.filter(cn =>
-      !existingCats.find(c => c.name.toLowerCase() === cn.toLowerCase())
+      !existingCats.find(c => normalize(c.name) === normalize(cn))
     );
 
     const addAll = (items, action, done) => {
@@ -981,14 +1047,40 @@ document.getElementById('confirmImportBtn').addEventListener('click', () => {
       chrome.runtime.sendMessage({ action, name: first }, () => addAll(rest, action, done));
     };
 
-    const addSvcs = (svcs, allCats, done) => {
+    // Adiciona serviços novos ou atualiza categoria de existentes
+    const processSvcs = (svcs, allCats, allSvcs, done) => {
       if (!svcs.length) { done(); return; }
       const [first, ...rest] = svcs;
-      const cat = allCats.find(c => c.name.toLowerCase() === (first.categoria || '').toLowerCase());
-      chrome.runtime.sendMessage(
-        { action: 'addServiceType', name: first.name, categoryId: cat?.id || null },
-        () => addSvcs(rest, allCats, done)
-      );
+      
+      // Busca categoria usando normalização
+      const normalize = str => str.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      
+      const cat = allCats.find(c => normalize(c.name) === normalize(first.categoria || ''));
+      const catId = cat?.id || null;
+      const existing = allSvcs.find(s => normalize(s.name) === normalize(first.name));
+
+      if (existing) {
+        // Serviço já existe: atualiza categoria apenas se tiver uma
+        // Se serviço existe mas não tem categoria, atualiza
+        // Se serviço tem categoria diferente, atualiza
+        const shouldUpdate = catId && (!existing.categoryId || existing.categoryId !== catId);
+        
+        if (shouldUpdate) {
+          chrome.runtime.sendMessage(
+            { action: 'setServiceCategory', id: existing.id, categoryId: catId },
+            () => processSvcs(rest, allCats, allSvcs, done)
+          );
+        } else {
+          processSvcs(rest, allCats, allSvcs, done);
+        }
+      } else {
+        chrome.runtime.sendMessage(
+          { action: 'addServiceType', name: first.name, categoryId: catId },
+          () => processSvcs(rest, allCats, allSvcs, done)
+        );
+      }
     };
 
     addAll(newProfs, 'addProfessional', () => {
@@ -996,7 +1088,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', () => {
         // Busca estado atualizado para ter os IDs das categorias recém-criadas
         chrome.runtime.sendMessage({ action: 'getState' }, (fresh) => {
           const allCats = fresh.serviceCategories || [];
-          addSvcs(newSvcs, allCats, () => {
+          const allSvcs = fresh.serviceTypes      || [];
+          processSvcs(servicos, allCats, allSvcs, () => {
             document.getElementById('uploadPreview').style.display = 'none';
             document.getElementById('gsLinkInput').value = '';
             _importData = { profissionais: [], servicos: [] };
@@ -1151,4 +1244,5 @@ document.getElementById('gsTemplateLink').addEventListener('click', (e) => {
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────
+console.log("[PANEL DEBUG] Panel iniciado, carregando estado...");
 loadState();
